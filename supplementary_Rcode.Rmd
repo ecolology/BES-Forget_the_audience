@@ -1,0 +1,530 @@
+---
+title: "Supplementary R code for the manuscript:"
+subtitle: "Forget the audience: tadpoles release similar disturbance cues regardless of kinship or familiarity"
+author: "Kevin R Bairos-Novak"
+date: "Document last run on `r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document: 
+    df_print: kable
+    toc: yes
+    highlight: tango
+    theme: cerulean
+    number_sections: yes
+    fig_width: 10
+    fig_height: 6
+    fig_caption: yes
+    code_folding: hide
+editor_options: 
+  chunk_output_type: console
+---
+
+<style>
+.container { width: 1000px; }
+h2 { color: #f8f8f8; background-color: #437FAA; }
+h3 { color: #f8f8f8; background-color: #437FAA; text-align: center; }
+<!-- Get highlight from Terminal: pandoc --print-highlight-style tango -->
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment="", message=F, warning=F)
+
+setwd("~/Documents/Analytics/R/Disturbance Cues/Familiarity & Kinship Donors/Dryad")
+rm(list=ls()) # clear environment
+options(contrasts = c("contr.sum", "contr.poly")) # use Type III Sum of Squares
+
+require(readxl)    # for loading in excel data
+require(tidyverse) # for manipulating data
+require(car)       # for conducting the Levene's F-test of homoscedasticity
+require(lme4)      # for quasipoisson GLM
+require(lmerTest)  # for quasipoisson GLM
+require(grid)      # for multi-figure plotting
+require(gridExtra) # for multi-figure plotting
+require(ggplotify) # for multi-figure plotting
+
+# load the data and assign factor variables
+data <- read_excel("data.xlsx") %>% 
+	mutate(trial = factor(trial), 
+	       kinship = factor(kinship), 
+	       familiarity = factor(familiarity),
+	       cue = fct_relevel(cue, "W", "UC", "DC"))
+
+# Create a custom ggtheme object for plotting barplots
+ggtheme <-
+	theme( plot.margin = unit(c(0.5,0.5,0.5,0),"cm"),
+	       axis.line = element_line(),
+	       axis.text = element_text(size = 17, color = "black"),
+	       axis.text.x=element_text(vjust=-0.1),
+	       axis.title.x = element_text(margin = margin(t=20), size=20, angle=0),
+	       axis.title.y = element_text(margin = margin(r=20), size=20, vjust=-5),
+	       legend.position = c(0.5, 0.95), 
+	       legend.direction = "horizontal",
+	       legend.title = element_text(size=17),
+	       legend.text  = element_text(size=17),
+	       legend.justification = "center",
+	       legend.key = element_rect(colour = "white", fill = NA),
+	       panel.background = element_blank(),
+	       panel.border = element_blank(),
+	       panel.grid.major = element_blank(), # major panel grid lines
+	       panel.grid.minor = element_blank(), # minor grid lines
+	       panel.spacing = unit(-0.09, "lines")) # space between facet panels
+```
+
+# Three-way (cue x familiarity x kinship) analysis
+
+For the first analysis, we examine only undisturbed or disturbance cues and exclude the control water ('W') cue, as it lacks familiarity and kinship distinctions. For this analysis, pre-cue exposure numbers of line crosses are modelled based on a possible three-way interaction between cue type (undisturbed or disturbance cue), familiarity type (familiar or unfamiliar), and kinship type (kin or non-kin).
+
+## Pre-exposure analysis
+
+Due to a high overdispersion parameter, we model counts of pre-exposure line crosses using a quasipoisson GLM. 
+We initially use Type I SS estimates from the `summary()` function to determine the most significant parameter estimates, then use the `drop1()` function to obtain Type III estimates for our final reporting, which are more accurate than Type I SS when the order of model factor inputs is not important.
+
+```{r}
+cat("Using summary (type I SS):")
+(m1.pre <- data %>% 
+ 	filter(cue!="W") %>% # remove water cues
+	glm(data=., pre ~ cue * familiarity * kinship, family=quasipoisson)) %>%
+	summary # significant familiarity x kinship iteraction, no other significant factors
+# kappa dispersion parameter = 4.875471
+
+cat("Using drop1 (type III SS):")
+m1.pre %>% drop1("familiarity:kinship", test="F") # F(1,239) = 5.28, P = 0.023
+m1.pre %>% drop1("kinship", test="F") # F(1,239) ≤ 0.52, P ≥ 0.47)
+```
+
+A significant interaction ($F_{1,239}$ = 5.28, $p$ = 0.023) between familiarity and kinship warrants data splitting by both factors.
+
+#### **Pre-exposure analysis split by kinship**
+
+**Only kin treatments:**
+
+```{r}
+## only kin treatments:
+cat("Using summary (type I SS):")
+data %>% filter(cue!="W" & kinship == "kin") %>%
+	glm(data=., pre  ~ cue * familiarity, family=quasipoisson) %>% 
+	summary
+
+cat("Using drop1 (type III SS):")
+data %>% filter(cue!="W" & kinship == "kin") %>%
+	glm(data=., pre  ~ cue * familiarity, family=quasipoisson) %>% 
+	drop1("familiarity", test="F") 
+# all F(1,118) ≤ 2.00, P ≥ 0.16
+```
+
+All slope parameters are non-significant ($F_{1,118}$ ≤ 2.00, $p$ ≥ 0.16).
+
+**Only non-kin treatments:**
+
+```{r}
+## only non-kin treatments:
+cat("Using summary (type I SS):")
+data %>% filter(cue!="W" & kinship == "non-kin") %>%
+	glm(data=., pre  ~ cue * familiarity, family=quasipoisson) %>% 
+	summary
+
+cat("Using drop1 (type III SS):")
+data %>% filter(cue!="W" & kinship == "non-kin") %>%
+	glm(data=., pre  ~ cue * familiarity, family=quasipoisson) %>% 
+	drop1("familiarity", test="F") # F(1,121) ≤ 3.34, P ≥ 0.070
+```
+
+All slope parameters are non-significant ($F_{1,121}$ ≤ 3.34, $p$ ≥ 0.07).
+
+#### **Pre-exposure analysis split by familiarity**
+
+**Only familiar cue treatments:**
+
+```{r}
+## only familiar cue treatments:
+cat("Using summary (type I SS):")
+data %>% filter(cue!="W" & familiarity == "familiar") %>%
+	glm(data=., pre  ~ cue * kinship, family=quasipoisson) %>% 
+	summary
+
+cat("Using drop1 (type III SS):")
+data %>% filter(cue!="W" & familiarity == "familiar") %>%
+	glm(data=., pre  ~ cue * kinship, family=quasipoisson) %>% 
+	drop1("kinship", test="F") # F(1,123) ≤ 1.26, P ≥ 0.26
+```
+
+All slope parameters are non-significant ($F_{1,123}$ ≤ 1.26, $p$ ≥ 0.26).
+
+**Only unfamiliar cue treatments:**
+
+```{r}
+## only unfamiliar cue treatments:
+cat("Using summary (type I SS):")
+data %>% filter(cue!="W" & familiarity == "unfamiliar") %>%
+	glm(data=., pre  ~ cue * kinship, family=quasipoisson) %>% 
+	summary
+
+cat("Using drop1 (type III SS):")
+data %>% filter(cue!="W" & familiarity == "unfamiliar") %>%
+	glm(data=., pre  ~ cue * kinship, family=quasipoisson) %>% 
+	drop1("kinship", test="F") # F(1,116) = 4.48, P = 0.036
+data %>% filter(cue!="W" & familiarity == "unfamiliar") %>%
+	glm(data=., pre  ~ cue * kinship, family=quasipoisson) %>% 
+	drop1("cue:kinship", test="F") # F(1,116) ≤ 0.28, P ≥ 0.60
+```
+
+There is a slight difference in unfamiliar kin vs. non-kin pre-exposure line crosses (kinship: $F_{1,116}$ = 4.48, $p$ ≥ 0.036). 
+Other slope parameters are non-significant ($F_{1,116}$ ≤ 0.28, $p$ ≥ 0.60).
+
+However, after correcting for multiple splits ($\alpha' = 0.025$), there is no significant pre-exposure difference.
+
+```{r}
+main1_pre_lines_summary <- data %>% filter(cue!="W") %>% 
+	mutate(cue = fct_drop(cue, "W") %>%
+	       	fct_recode("undisturbed cue"="UC", "disturbance cue"="DC")) %>%
+	group_by(kinship, familiarity, cue) %>% 
+	summarise(n = n(),
+		  mean_lines = mean(pre), 
+		  sd_lines = sd(pre),
+		  se_lines = sd(pre)/n())
+main1_pre_lines_summary
+```
+
+
+### Pre-exposure plot
+
+```{r}
+p1.pre <- data %>% filter(cue!="W") %>%
+	within({cue <- factor(cue, levels=c("UC","DC"), 
+			      labels=c("Undisturbed cue", "Disturbance cue"))}) %>%
+	mutate(kinfam = interaction(kinship, familiarity)) %>%
+	group_by(kinfam, cue) %>%
+	summarise(mean = mean(pre, na.rm=T), se = sd(pre, na.rm=T)/sqrt(n()), n = n()) %>%
+	ggplot(aes(x = kinfam, y = mean, fill = cue)) + 
+	ggtheme +
+	geom_bar(position=position_dodge(), stat = "identity", col = "black") +
+	geom_errorbar(position=position_dodge(width = 0.9), aes(ymin = mean - se, ymax = mean + se),
+		      width = 0.3) +
+	labs(y="Pre-exposure line crosses\n", x=NULL) +
+	scale_fill_manual(name = "Cue type: ", labels = c("Undisturbed cue ", "Disturbance cue"),
+			  values = c("bisque", "light green")) +
+	scale_y_continuous(limits = c(0, 29),
+			   breaks = seq(0,25,by=5),
+			   expand = c(0,0)) +
+	scale_x_discrete(name = "Audience composition", labels = c("Familiar\nkin", "Familiar\nnon-kin", "Unfamiliar\nkin", "Unfamiliar\nnon-kin")) +
+	geom_abline(aes(slope=0, intercept=0)) +
+	geom_text(aes(y = mean+se+1,
+		      label=paste0("n=",n,"")), 
+		  position=position_dodge(width=0.9), size=5)
+p1.pre
+```
+
+Regardless of if there are true differences in the pre-exposure line crosses, we employ a metric in the next section that should be robust to differences in pre-exposure line crosses among treatments.
+
+## Proportion change analysis
+
+The proportion change (and percent change) in line crosses to compare the relative change in tadpole activity going from the before cue exposure period ($pre$) to after cue exposure ($post$). To do this, we use a three-way ANOVA (with its parametric assumptions tested in the next section).
+
+$$ \begin{aligned}
+proportion \; change &= \frac{post - pre}{pre} \\ percent \; change &= \frac{post - pre}{pre} \cdot100\% 
+\end{aligned}
+$$
+
+```{r}
+cat("Using summary (type I SS):")
+(m1.prop <- data %>% filter(cue!="W") %>%
+		lm(data=., prop ~ cue * familiarity * kinship)) %>%
+	summary # no factors significant except cue type
+
+
+cat("Using drop1 (type III SS):")
+m1.prop %>% drop1("cue", test="F") # F(1,239) = 11.89, P = 0.0007
+m1.prop %>% drop1("familiarity", test="F") # F(1,239) ≤ 1.99, P ≥ 0.16
+
+```
+
+
+```{r, eval=F}
+## Analysis on post - pre difference ##
+# Not run: same analysis, using difference in line crosses instead of proportion line crosses
+cat("Using summary (type I SS):")
+(m1.diff <- data %>% filter(cue!="W") %>%
+		lm(data=., diff ~ cue * familiarity * kinship)) %>%
+	summary # same outcome
+
+cat("Using drop1 (type III SS):")
+m1.diff %>% drop1("cue", test="F") # F(1,239) = 11.35, P = 0.0009
+m1.diff %>% drop1("familiarity", test="F") # F(1,239) ≤ 2.77, P ≥ 0.097
+```
+
+### Parametric assumptions
+
+Next, we test the normality and homogeneity of variances for the ANOVA model by assessing the distribution of model residuals.
+
+```{r}
+# normality:
+par(mfrow=c(1,2))
+hist(resid(m1.prop), main="Histogram of model residuals")
+qqnorm(resid(m1.prop)); qqline(resid(m1.prop))
+ks.test(resid(m1.prop), "pnorm", mean = mean(resid(m1.prop)), sd = sd(resid(m1.prop)))
+# homoscedasticity:
+data %>% car::leveneTest(prop  ~ cue * familiarity * kinship, data=.)
+```
+
+Despite the slight skew in the residuals, the data are roughly normally-distributed (Kolmogorov-Smirnov test, D = 0.068, $p$ = 0.21), and ANOVA procedures are relatively robust to deviances from normality [Kirk, RE (1995). Experimental Design: Procedures For The Behavioral Sciences (3 ed.). Pacific Grove, CA, USA: Brooks/Cole]. 
+
+Further, the assumption of homoscedasticity is upheld (Levene's $F_{11,361}$ = 0.90. $p$ = 0.54)
+
+### Effect sizes
+
+```{r}
+main1_prop_summary <- data %>% filter(cue!="W") %>%
+	mutate(cue = fct_drop(cue, "W") %>%
+	       	fct_recode("undisturbed cue"="UC", "disturbance cue"="DC")) %>%
+	pivot_longer(cols=pre:prop) %>%
+	group_by(familiarity, kinship, cue, name) %>%
+	summarise(n = n(),
+		  mean = mean(value, na.rm=T), 
+		  se = sd(value, na.rm=T)/sqrt(n())) %>%
+	pivot_wider(id_cols=c(familiarity:cue, n), 
+		    names_from=name, values_from=c(mean,se), names_sort=T) %>%
+	relocate(c(mean_pre, se_pre), .after=n) %>%
+	relocate(c(mean_post, se_post), .after=se_pre) %>%
+	relocate(c(mean_prop, se_prop), .after=se_post) 
+main1_prop_summary
+```
+
+### Percent change plot
+
+```{r}
+
+p1 <- data %>% filter(cue!="W") %>%
+	within({cue <- factor(cue, levels=c("UC","DC"), 
+			      labels=c("Undisturbed cue", "Disturbance cue"))}) %>%
+	mutate(kinfam = interaction(kinship, familiarity)) %>%
+	group_by(kinfam, cue) %>%
+	summarise(mean = mean(prop, na.rm=T), se = sd(prop, na.rm=T)/sqrt(n()), n = n()) %>%
+	ggplot(aes(x = kinfam, y = mean, fill = cue)) + 
+	ggtheme +
+	geom_bar(position=position_dodge(), stat = "identity", col = "black") +
+	geom_errorbar(position=position_dodge(width = 0.9), aes(ymin = mean - se, ymax = mean + se),
+		      width = 0.3) +
+	labs(y="Percent change in receiver line crosses\n", x=NULL) +
+	scale_fill_manual(name = "Cue type: ", labels = c("Undisturbed cue ", "Disturbance cue"),
+			  values = c("bisque", "light green")) +
+	scale_y_continuous(limits = c(-0.58, 0.15),
+			   breaks = seq(-0.5,0,by=0.1),
+			   labels = scales::percent_format(accuracy = 1)) +
+	scale_x_discrete(name = "Audience composition", labels = c("Familiar\nkin", "Familiar\nnon-kin", "Unfamiliar\nkin", "Unfamiliar\nnon-kin")) +
+	geom_abline(aes(slope=0, intercept=0)) +
+	geom_text(aes(y = ifelse(mean > 0, mean-se-0.04, 
+				 ifelse(mean+se > 0, mean+se+0.04, 0.04)), 
+				 label=paste0("n=",n,"")), 
+		  position=position_dodge(width=0.9), size=5) +
+	geom_text(aes(y=mean-se-0.04,
+		      label = rep(c("A", "B"),4)), 
+		  position=position_dodge(width=0.9), size=5)
+p1
+```
+
+
+# One-way (cue type) analysis
+
+For the second main analysis, we examine all three cue types, including control water, and thus cannot include familiarity vs. kinship distinctions (water has no familiarity or kin types associated). We proceed similar to the analysis above, using quasipoisson GLMs for pre-exposure counts and proportion change in line crosses for assessing the relative change in tadpole activity for each cue type.
+
+## Pre-exposure analysis
+
+```{r}
+cat("Using summary (type I SS):")
+(m2.pre <- data %>% glm(data=., pre ~ cue, family=quasipoisson)) %>%
+	summary
+
+cat("Using drop1 (type III SS):")
+m2.pre %>% drop1("cue", test="F") # F(2, 370) = 0.07, p = 0.93
+```
+
+The cue parameter is non-significant ($F_{1,118}$ = 0.07, $p$ = 0.93).
+
+### Pre-exposure plot
+
+```{r}
+main2_pre_lines_summary <- data %>%
+	mutate(cue = fct_recode(cue, "Control Water" = "W", 
+				"undisturbed cue"="UC", "disturbance cue"="DC")) %>%
+	group_by(kinship, familiarity, cue) %>% 
+	summarise(n = n(),
+		  mean_lines = mean(pre), 
+		  sd_lines = sd(pre),
+		  se_lines = sd(pre)/n())
+main2_pre_lines_summary
+```
+
+```{r}
+p2.pre <- data %>%
+	group_by(cue) %>%
+	summarise(mean = mean(pre, na.rm=T), 
+		  se = sd(pre, na.rm=T)/sqrt(n()), n = n()) %>%
+	ggplot(aes(x = cue, y = mean, fill = cue)) +
+	ggtheme +
+	geom_bar(position=position_dodge(width = 0.9), width=1, 
+		 stat = "identity", col = "black") +
+	geom_errorbar(position=position_dodge(width = 0.9), 
+		      aes(ymin = mean - se, ymax = mean + se),
+		      width = 0.3) +
+	labs(y="Pre-exposure line crosses\n", x="Cue type") +
+	scale_fill_manual(guide = FALSE, 
+			  values = c("skyblue","bisque", "light green")) + 
+	scale_y_continuous(limits = c(0, 29), breaks = seq(0,25,by=5),
+			   expand = c(0,0)) +
+	scale_x_discrete(labels = c("Control\nwater", "Undisturbed\ncue", 
+				    "Disturbance\ncue")) +
+	geom_abline(aes(slope=0, intercept=0)) +
+	geom_text(aes(y = mean+se+1,
+		      label=paste0("n=",n,"")), 
+		  position=position_dodge(width=0.9), size=5)
+p2.pre
+```
+
+## Proportion change in line crosses analysis
+
+We use a one-way ANOVA to examine differences in the proportion change in line crosses across the three cue types (with its parametric assumptions tested in the next section).
+
+```{r}
+cat("Using summary (type I SS):")
+data %>% lm(data=., prop ~ cue) %>%
+	summary
+
+cat("Using drop1 (type III SS):")
+(m2.prop <- data %>% aov(data=., prop ~ cue)) %>%
+	drop1("cue", test="F") # F(2,370) = 13.1, P < 0.0001
+```
+
+The cue parameter is significant ($F_{2,370}$ = 13.1, $p$ < 0.0001). We thus use Tukey HSD post-hoc tests to determine which cues are significantly different.
+
+```{r}
+TukeyHSD(m2.prop)
+# W  vs. UC: P = 0.13
+# W  vs. DC: P < 0.0001
+# UC vs. DC: P = 0.0053
+```
+
+Water and undisturbed cue are not significantly different (Tukey HSD, $p$ = 0.13), but disturbance cues elicit a significantly lower proportion change in line crosses relative to water ($p$ < 0.0001) and undisturbed cues ($p$ = 0.0053).
+
+
+```{r, eval=F}
+## Analysis on post - pre difference ##
+# Not run: same analysis, using difference in line crosses instead of proportion line crosses
+cat("Using summary (type I SS):")
+data %>% lm(data=., diff ~ cue) %>%
+	summary # same outcome
+
+cat("Using drop1 (type III SS):")
+(m2.diff <- data %>% aov(data=., diff ~ cue)) %>%
+	drop1("cue", test="F") # F(2,370) = 8.45, P = 0.0003
+
+TukeyHSD(m2.diff)
+# W  vs. UC: P = 0.84
+# W  vs. DC: P = 0.0005
+# UC vs. DC: P = 0.0036
+```
+
+### Parametric assumptions
+
+Next, we test the normality and homogeneity of variances for the ANOVA model by assessing the distribution of model residuals.
+
+```{r}
+# normality:
+hist(resid(m2.prop), main="Histogram of model residuals")
+qqnorm(resid(m2.prop)); qqline(resid(m2.prop))
+ks.test(resid(m2.prop), "pnorm", mean = mean(resid(m2.prop)), sd = sd(resid(m2.prop)))
+# homoscedasticity:
+data %>% car::leveneTest(prop  ~ cue * familiarity * kinship, data=.)
+```
+
+Despite the slight skew in the residuals, the data are roughly normally-distributed (Kolmogorov-Smirnov test, D = 0.066, $p$ = 0.08), and ANOVA procedures are relatively robust to deviances from normality [Kirk, RE (1995). Experimental Design: Procedures For The Behavioral Sciences (3 ed.). Pacific Grove, CA, USA: Brooks/Cole]. Further, the assumption of homoscedasticity is upheld (Levene's $F_{11,361}$ = 0.90. $p$ = 0.54).
+
+### Effect sizes
+
+```{r}
+### effect sizes:
+main2_summary <- data %>% 
+	pivot_longer(cols=pre:prop) %>%
+	group_by(cue, name) %>%
+	summarise(mean = mean(value, na.rm=T), 
+		  se = sd(value, na.rm=T)/sqrt(n()),
+		  n = n()) %>%
+	pivot_wider(id_cols=c(cue, n), 
+		    names_from=name, values_from=c(mean,se), names_sort=T) %>%
+	relocate(c(mean_pre, se_pre), .after=n) %>%
+	relocate(c(mean_post, se_post), .after=se_pre) %>%
+	relocate(c(mean_prop, se_prop), .after=se_post) 
+main2_summary
+
+```
+
+```{r, eval=F}
+# Additional comparisons referenced in-text:
+main2_summary$mean_prop[3]/main2_summary$mean_prop[1] # ~23 fold greater response
+main2_summary$mean_prop[3]/main2_summary$mean_prop[2] # ~2.5 fold greater response
+main2_summary$mean_prop[3]*100 # 37% mean reduction due to DCs
+data %>% filter(cue != "DC") %>% summarise(mean = mean(prop, na.rm=T))*100 
+# 8% mean reduction due to UC & W
+-37.30232/-8.355641 # ~4.5-fold higher response to DC vs. UC/W
+```
+
+
+### Percent change plot
+
+```{r}
+p2 <- data %>%
+	group_by(cue) %>%
+	summarise(mean = mean(prop, na.rm=T), se = sd(prop, na.rm=T)/sqrt(n()), n = n()) %>%
+	ggplot(aes(x = cue, y = mean, fill = cue)) +
+	ggtheme +
+	geom_bar(position=position_dodge(width = 0.9), width=1, stat = "identity", col = "black") +
+	geom_errorbar(position=position_dodge(width = 0.9), aes(ymin = mean - se, ymax = mean + se),
+		      width = 0.3) +
+	labs(y="Percent change in receiver line crosses\n", x="Cue type") +
+	scale_fill_manual(guide = FALSE, values = c("skyblue", "bisque", "light green")) + # also this one:
+	scale_y_continuous(limits = c(-0.58, 0.15), 
+			   breaks = seq(-0.5,0,by=0.1),
+			   labels = scales::percent_format(accuracy = 1)) +
+	scale_x_discrete(labels = c("Control\nwater", "Undisturbed\ncue", "Disturbance\ncue")) +
+	geom_abline(aes(slope=0, intercept=0)) +
+	geom_text(aes(y = ifelse(mean > 0, mean-se-0.04, 
+				 ifelse(mean+se > 0, mean+se+0.04, 0.04)), 
+				 label=paste0("n=",n,"")), 
+		  position=position_dodge(width=0.9), size=5) +
+	geom_text(aes(y=mean-se-0.04,
+		      label = c("a", "a","b")), 
+		  position=position_dodge(width=0.9), size=5)
+p2
+```
+
+# Final plots
+
+## Manuscript Figure 2
+```{r, fig.width=14, fig.height=6}
+# setEPS()
+# postscript("Fig2.eps", width = 14, height = 6)
+grid.arrange(as.grob(p1), as.grob(p2 + theme(axis.text.y=element_blank()) + labs(y=NULL)), layout_matrix=t(as.matrix(c(1,1,2))))
+# dev.off()
+```
+
+## Supplementary Figure 1
+```{r, fig.width=14, fig.height=6}
+# setEPS()
+# postscript("FigS1.eps", width = 14, height = 6)
+grid.arrange(as.grob(p1.pre), as.grob(p2.pre + theme(axis.text.y=element_blank()) + labs(y=NULL)), layout_matrix=t(as.matrix(c(1,1,2))))
+# dev.off()
+```
+
+
+
+
+----
+
+# Session info:
+```{r}
+sessionInfo()
+```
+
+
+
+
+
+
