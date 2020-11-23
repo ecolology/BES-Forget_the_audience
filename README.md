@@ -1,4 +1,3 @@
-# BES-Forget_the_audience
 Data and R script for conducting the analyses presented in: **Forget the audience: Tadpoles release similar disturbance cues regardless of kinship or familiarity**, accepted for publication in *Behavioral Ecology and Sociobiology*, **74**:147. doi:10.1007/s00265-020-02936-8doi:10.1007/s00265-020-02936-8
 
 ***Paper authors:*** Bairos-Novak KR*, Crane AL, Achtymichuk G, Hsin J, Rivera-Hernández IAE, Simko OM, Wrynn TE, Chivers DP, Ferrari MCO 
